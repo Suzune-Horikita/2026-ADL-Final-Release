@@ -155,7 +155,7 @@ class AgentSpec(_Strict):
     personas: Optional[list[str]] = None
     # Thinking mode for models that have one (Qwen3.5: chat_template_kwargs.enable_thinking).
     # Off unless the agent file says `reasoning: true`. Must match how the LoRA was trained
-    # (scripts/train_lora.py --thinking / --no-thinking).
+    # (with or without thinking).
     reasoning: bool = False
     variant_of: Optional[str] = None       # set on those copies: the id of the agent file
     personas_given: Optional[int] = None   # on those copies: personas the student handed in

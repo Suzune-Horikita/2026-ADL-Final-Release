@@ -59,7 +59,7 @@ class Schema:
 
 
 def load_item_spec(path: Path) -> dict[str, dict[str, Any]]:
-    """{item id: {seller_cost, buyer_value, ...}} from an item spec (scripts/make_item_spec.py)."""
+    """{item id: {seller_cost, buyer_value, ...}} from an item file (e.g. items_example.json)."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     items = {it["id"]: it for it in data["items"]}
     if len(items) != len(data["items"]):
