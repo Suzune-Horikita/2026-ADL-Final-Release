@@ -147,8 +147,10 @@ round-by-round `transcript.md` of every message, offer and trade. To browse a ru
 - **Fairness:** every market is played once per seller seat with the stock rotated, so
   every seller holds every seller's stock once.
 - **Score:** a seller's profit (revenue - cost of what it sold), a buyer's surplus (value
-  of what it bought - what it paid), averaged over its markets and personas. In phases 1
-  and 2 grades come from TA agents playing in the same markets; phase 3 is a ranking.
+  of what it bought - what it paid), averaged over the agent's markets. Your LoRA plays once
+  per persona (3 agents); **you are scored by your best one** over the whole run. In
+  phases 1 and 2 grades come from TA agents playing in the same markets; phase 3 is a
+  ranking.
 
 ## Your training code
 

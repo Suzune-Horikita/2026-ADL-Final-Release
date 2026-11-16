@@ -327,9 +327,9 @@ if (typeof document !== "undefined") (function () {
         const rows = sd.students.filter(s => s.role === role);
         if (!rows.length) return;
         const graded = rows.some(s => "grade" in s);
-        h += `<h4>Student ${role}s</h4><div class="scroll"><table class="std"><thead><tr><th>rank</th><th>student</th>`
+        h += `<h4>Student ${role}s (best persona agent)</h4><div class="scroll"><table class="std"><thead><tr><th>rank</th><th>student</th><th>best agent</th>`
            + (graded ? "<th>grade</th>" : "") + "<th>raw $</th><th>$ / round</th><th>markets</th></tr></thead><tbody>"
-           + rows.map(s => `<tr><td>${s.rank}</td><td>${esc(s.owner)}</td>`
+           + rows.map(s => `<tr><td>${s.rank}</td><td>${esc(s.owner)}</td><td>${esc(s.best_agent || "")}</td>`
              + (graded ? `<td>${s.grade == null ? "–" : s.grade.toFixed(3)}</td>` : "")
              + `<td>${s.mean_raw.toFixed(2)}</td><td>${s.mean_raw_per_round == null ? "–" : s.mean_raw_per_round.toFixed(2)}</td>`
              + `<td>${s.markets}</td></tr>`).join("") + "</tbody></table></div>";

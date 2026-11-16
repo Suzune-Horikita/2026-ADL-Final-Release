@@ -214,11 +214,13 @@ def grade(x: float, lo: float, hi: float, g: Any) -> Optional[float]:
 
 def standings(rows: list[dict[str, Any]], grading: Any = None, graded_roles: tuple = (),
               rounds: Optional[int] = None) -> dict[str, Any]:
-    """Standings from the score rows: per student and role (all its agents, e.g. one LoRA
-    with several personas), per agent, per economy. The ranking metric is the raw score
-    (seller profit, buyer surplus, in dollars); with `grading`, students of the graded
-    roles also get a grade from the TA anchors of each economy (GradingSpec), and are
-    ranked by it. Nothing is capped."""
+    """Standings from the score rows: per student and role, per agent, per economy. A
+    student plays one agent per persona (its LoRA with persona 1, 2, 3); the student's score
+    is its BEST persona agent's, taken over the whole run: the agent with the best grade
+    (mean over economies, from each economy's TA anchors, GradingSpec) when the role is
+    graded, else the best mean raw score (seller profit, buyer surplus, in dollars). Students
+    are ranked by it. TA agents count persona by persona (each is its own anchor point).
+    Nothing is capped."""
     def stats(rs: list[dict[str, Any]]) -> dict[str, Any]:
         norms = [r["normalized"] for r in rs if r["normalized"] is not None]
         raws = [r["raw"] for r in rs]
@@ -241,15 +243,12 @@ def standings(rows: list[dict[str, Any]], grading: Any = None, graded_roles: tup
         return items
 
     ta_ids = {r["agent"] for r in rows if r["owner"] == "ta"}
-    by_owner, by_agent, by_owner_econ = defaultdict(list), defaultdict(list), defaultdict(list)
+    by_agent: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
     ta_econ: dict[tuple[str, int], dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     for r in rows:
         by_agent[(r["agent"], r["role"], r["owner"])].append(r)
         e = r.get("repeat", 0)
-        if r["owner"] != "ta":
-            by_owner[(r["owner"], r["role"])].append(r)
-            by_owner_econ[(r["owner"], r["role"], e)].append(r)
-        elif r["role"] in graded_roles:
+        if r["owner"] == "ta" and r["role"] in graded_roles:
             ta_econ[(r["role"], e)][_ta_base(r["agent"], ta_ids)].append(r["raw"])
 
     anchors: dict[str, dict[str, Any]] = defaultdict(dict)
@@ -266,26 +265,40 @@ def standings(rows: list[dict[str, Any]], grading: Any = None, graded_roles: tup
                 "high": {"percentile": grading.high_percentile, "score": grading.high_score,
                          "agent": names[i_hi], "raw": round(hi, 2)}}
 
-    students = []
-    for (o, role), rs in by_owner.items():
-        row = {"owner": o, "role": role, "agents": len({r["agent"] for r in rs}), **stats(rs)}
+    graded = grading is not None
+
+    def agent_row(a: str, role: str, o: str, rs: list[dict[str, Any]]) -> dict[str, Any]:
+        """One persona agent: its stats, raw score per economy and (graded roles) its grade."""
+        row = {"agent": a, "role": role, "owner": o, **stats(rs)}
         econs = sorted({r.get("repeat", 0) for r in rs})
-        row["by_economy"] = {str(e): round(st.mean(r["raw"] for r in by_owner_econ[(o, role, e)]), 2)
+        row["by_economy"] = {str(e): round(st.mean(r["raw"] for r in rs if r.get("repeat", 0) == e), 2)
                              for e in econs}
-        if grading is not None and role in graded_roles:
+        if graded and role in graded_roles and o != "ta":
             per = {}
             for e in econs:
-                a = anchors[role].get(str(e))
-                if a:
-                    per[str(e)] = grade(row["by_economy"][str(e)], a["low"]["raw"], a["high"]["raw"], grading)
+                anc = anchors[role].get(str(e))
+                if anc:
+                    per[str(e)] = grade(row["by_economy"][str(e)], anc["low"]["raw"], anc["high"]["raw"], grading)
             row["grade_by_economy"] = per
             vals = [v for v in per.values() if v is not None]
             row["grade"] = round(st.mean(vals), 4) if vals else None
+        return row
+
+    agent_rows = [agent_row(a, role, o, rs) for (a, role, o), rs in by_agent.items()]
+    per_student: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for r in agent_rows:
+        if r["owner"] != "ta":
+            per_student[(r["owner"], r["role"])].append(r)
+    students = []
+    for (o, role), mine in per_student.items():
+        key = "grade" if "grade" in mine[0] else "mean_raw"
+        best = max(mine, key=lambda r: (r.get(key) if r.get(key) is not None else -1e18, r["agent"]))
+        row = {k: v for k, v in best.items() if k not in ("agent",)}
+        row.update(owner=o, role=role, agents=len(mine), best_agent=best["agent"],
+                   by_agent={r["agent"]: r.get(key) for r in sorted(mine, key=lambda r: r["agent"])})
         students.append(row)
-    graded = grading is not None
     students = rank(students, "grade" if graded else "mean_raw")
-    agents = rank([{"agent": a, "role": role, "owner": o, **stats(rs)}
-                   for (a, role, o), rs in by_agent.items()], "mean_raw")
+    agents = rank(agent_rows, "mean_raw")
     return {"metric": "raw: seller profit (revenue - cost), buyer surplus (value - paid), dollars",
             "grading": grading.model_dump() if graded else None,
             "anchors": dict(anchors), "students": students, "agents": agents}
@@ -297,8 +310,9 @@ def standings_md(stand: dict[str, Any], title: str, mock: bool = False) -> str:
     g = stand.get("grading")
     lines = [f"# Standings: {title}", "",
              "Raw score: seller profit (revenue - cost of units sold), buyer surplus (value of "
-             "units bought - money paid), in dollars per market; a student's row pools all of "
-             "its agents (one per persona). se = standard error over markets. failed calls = "
+             "units bought - money paid), in dollars per market. A student plays one agent per "
+             "persona; its row is its BEST agent over the whole run (best grade when graded, else "
+             "best raw score), named under best agent. se = standard error over markets. failed calls = "
              "turns with no valid tool call (e.g. a reply cut off at the token limit) or no "
              "answer from the model server."]
     if mock:
@@ -308,8 +322,9 @@ def standings_md(stand: dict[str, Any], title: str, mock: bool = False) -> str:
         lines += ["", f"Grade: per economy, the TA agents of the graded role are ranked by raw "
                       f"score; the TA at percentile {g['low_percentile']:g} gets {g['low_score']:g}, "
                       f"the one at {g['high_percentile']:g} gets {g['high_score']:g} (with few TAs "
-                      f"the lower one); a student's grade is the line through the two at its raw "
-                      f"score (not capped), averaged over economies."]
+                      f"the lower one); an agent's grade is the line through the two at its raw "
+                      f"score (not capped), averaged over economies; a student's grade is its best "
+                      f"agent's."]
     lines.append("")
     for role, per_e in (stand.get("anchors") or {}).items():
         lines += [f"## Grade anchors ({role}s)", "", "| economy | TAs | low anchor | raw | high anchor | raw |",
@@ -324,13 +339,13 @@ def standings_md(stand: dict[str, Any], title: str, mock: bool = False) -> str:
             continue
         econs = sorted({e for s in rows for e in s["by_economy"]}, key=int)
         has_grade = any("grade" in s for s in rows)
-        head = "| rank | student | agents | markets | " + ("grade | " if has_grade else "") + \
+        head = "| rank | student | best agent | agents | markets | " + ("grade | " if has_grade else "") + \
                "mean raw $ | se | per round $ | normalized | " + " | ".join(f"econ {e} raw" for e in econs) + \
                (" | " + " | ".join(f"econ {e} grade" for e in econs) if has_grade else "") + " |"
         lines += [f"## Student {role}s", "", head,
                   "|" + "---:|" * (head.count("|") - 1)]
         for s in rows:
-            cells = [str(s["rank"]), s["owner"], str(s["agents"]), str(s["markets"])]
+            cells = [str(s["rank"]), s["owner"], s.get("best_agent", ""), str(s["agents"]), str(s["markets"])]
             if has_grade:
                 cells.append(f(s.get("grade")))
             cells += [m(s["mean_raw"]), m(s["se_raw"]), m(s.get("mean_raw_per_round")),

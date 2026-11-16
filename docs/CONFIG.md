@@ -94,8 +94,9 @@ Grades from TA anchors (phases 1 and 2). Per economy, the TA agents of the grade
 role are ranked by mean raw score (seller profit, buyer surplus); the TA at
 `low_percentile` gets `low_score` and the TA at `high_percentile` gets `high_score`
 (position floor(p/100 x (n - 1)) from the lowest: with few TAs, the lower-scoring one,
-which favors students). A student's grade is the straight line through the two
-anchors at its raw score, not capped; its final grade is the mean over economies.
+which favors students). An agent's grade is the straight line through the two anchors
+at its raw score, not capped, averaged over economies; a student's grade is that of its
+best persona agent.
 ```
 
 </details>

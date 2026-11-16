@@ -54,7 +54,7 @@ def print_plan(run: LoadedRun) -> None:
 
 
 def print_summary(result: dict, top: int = 25) -> None:
-    """The standing display: students first (all their agents pooled), then TA agents.
+    """The standing display: students first (each by its best persona agent), then TA agents.
     Raw = seller profit / buyer surplus in dollars per market; grade from the TA anchors."""
     out = result["out"]
     print(f"wrote {out}  ({result['markets']} markets)")
@@ -69,12 +69,13 @@ def print_summary(result: dict, top: int = 25) -> None:
         rows = [s for s in stand.get("students", []) if s["role"] == role]
         if rows:
             graded = any("grade" in s for s in rows)
-            print(f"\nstudent {role}s ({len(rows)}; raw = {'profit' if role == 'seller' else 'surplus'} "
-                  f"$ per market{', grade from TA anchors, not capped' if graded else ''})")
-            print(f"{'rank':>4}  {'student':24} {'agents':>6} {'mkts':>5} " + (f"{'grade':>7} " if graded else "")
+            print(f"\nstudent {role}s ({len(rows)}; each student's best persona agent; raw = "
+                  f"{'profit' if role == 'seller' else 'surplus'} $ per market"
+                  f"{', grade from TA anchors, not capped' if graded else ''})")
+            print(f"{'rank':>4}  {'student':24} {'best agent':>16} {'mkts':>5} " + (f"{'grade':>7} " if graded else "")
                   + f"{'raw $':>9} {'se':>7} {'$/round':>8}")
             for s in rows[:top]:
-                print(f"{s['rank']:>4}  {s['owner']:24} {s['agents']:>6} {s['markets']:>5} "
+                print(f"{s['rank']:>4}  {s['owner']:24} {s.get('best_agent', '').rsplit('_', 1)[-1]:>16} {s['markets']:>5} "
                       + (f"{f(s.get('grade')):>7} " if graded else "")
                       + f"{m(s['mean_raw']):>9} {m(s['se_raw']):>7} {m(s.get('mean_raw_per_round')):>8}")
             if len(rows) > top:
